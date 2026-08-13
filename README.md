@@ -1,169 +1,158 @@
-# Instagram-Monitor-Bot
-Discord bot that monitors Instagram account status (active/banned) and follower counts via proxy-rotated requests!
-# Instagram Monitor Bot
+Instagram Monitor Bot
 
-A Discord bot that monitors Instagram accounts and sends real-time alerts when their status changes — either from **banned → active** (unban monitoring) or **active → banned** (ban monitoring). Built with Python, discord.py, and SQLite, with full proxy support and persistence across restarts.
+A simple Discord bot I made to monitor Instagram accounts and get notified when their status changes.
 
----
+You can use it to watch a banned account until it comes back, or monitor an active account and get notified if it becomes unavailable.
 
-## Features
+The bot is written in Python and uses discord.py, aiohttp, and SQLite.
 
-- **Dual monitoring modes** — watch for an account getting unbanned *or* getting banned
-- **False positive protection** — confirms status changes with 2 additional checks before firing an alert
-- **Follower count reporting** — on unban events, displays the account's recovered follower count (with up to 3 retries to fetch it)
-- **Persistent monitoring** — all active monitors survive bot restarts, resuming automatically on startup
-- **Proxy support** — routes all Instagram requests through a configurable HTTP proxy to avoid IP blocks
-- **Live proxy testing** — validates proxy credentials against ipify before saving
-- **Proxy persistence** — proxy settings are saved to both SQLite and `.env`/`config.py` so they survive restarts
-- **Check history** — stores and displays the last 10 ban/unban events with timestamps and elapsed time
-- **Discord slash commands** — clean `/command` interface via Discord's application command system
+Features
 
----
+* Monitor banned accounts for unban
+* Monitor active accounts for ban
+* Sends Discord alerts when something changes
+* Does extra checks before sending an alert to avoid false positives
+* Shows follower count when an account comes back
+* Saves monitors in SQLite, so they don’t disappear after a restart
+* Proxy support
+* Proxy testing with /setproxy
+* Keeps a small history of previous events
+* Slash commands
+* Automatically resumes old monitors when the bot starts again
 
-## Commands
+Commands
 
-| Command | Description |
-|---|---|
-| `/unban <username>` | Start monitoring a banned account — alerts when it comes back |
-| `/ban <username>` | Start monitoring an active account — alerts when it gets banned |
-| `/stop <username>` | Stop monitoring a specific account |
-| `/list` | Show all currently monitored accounts, split by mode |
-| `/history` | Show the last 10 completed ban/unban events |
-| `/setproxy <proxy>` | Set and test a new proxy — supports multiple formats (see below) |
+/unban <username>   Start watching a banned account
+/ban <username>     Start watching an active account
+/stop <username>    Stop monitoring an account
+/list               Show current monitors
+/history            Show recent events
+/setproxy <proxy>  Set a proxy
 
-### Proxy Formats for `/setproxy`
+Proxy formats
 
-```
+/setproxy accepts these formats:
+
 host:port
 host:port:user:pass
 user:pass@host:port
-```
 
----
+How it works
 
-## How It Works
+The bot checks monitored accounts every 30 seconds by default.
 
-1. The bot polls each monitored Instagram account every **30 seconds** via a configurable proxy.
-2. It first attempts Instagram's JSON endpoint (`?__a=1&__d=dis`). If that fails or returns no usable data, it falls back to scraping the HTML profile page.
-3. When a status change is detected, the bot runs **2 confirmation checks** (5 seconds apart) before sending an alert — this eliminates false positives from intermittent network errors.
-4. On unban detection, if follower count is unavailable, the bot retries up to **3 more times** before sending the alert anyway.
-5. Alerts are sent as Discord embeds with follower count and total elapsed monitoring time.
+It tries to get the account information first and, if that doesn’t work, it uses another method as a fallback.
 
----
+If the bot thinks the account changed status, it doesn’t immediately send the alert. It checks the account two more times with a small delay between each check.
 
-## Project Structure
+This is mainly to avoid alerts caused by temporary request errors.
 
-```
+For unban monitoring, the bot also tries to grab the follower count. If it can’t get it on the first try, it retries a few times.
+
+Files
+
 instagram_monitor_fixed/
-├── bot.py            # Discord bot, slash commands, monitoring task loop
-├── monitor.py        # Instagram account status checker (JSON + HTML fallback)
-├── database.py       # SQLite helpers for monitors, proxy, and history
-├── config.py         # Environment variable loading and defaults
-├── requirements.txt  # Python dependencies
-└── .env.example      # Template for environment variables
-```
+│
+├── bot.py
+├── monitor.py
+├── database.py
+├── config.py
+├── requirements.txt
+└── .env.example
 
----
+bot.py
 
-## Setup
+Discord bot, commands and the main monitoring loop.
 
-### 1. Prerequisites
+monitor.py
 
-- Python 3.11+
-- A Discord bot token ([Discord Developer Portal](https://discord.com/developers/applications))
-- An HTTP proxy (recommended: [DataImpulse](https://dataimpulse.com) — preconfigured as the default)
+Handles the Instagram checks and tries to figure out the current account status.
 
-### 2. Install dependencies
+database.py
 
-```bash
+SQLite stuff. Stores monitors, proxy settings and history.
+
+config.py
+
+Loads the configuration and environment variables.
+
+Setup
+
+1. Install Python
+
+Python 3.11+ is recommended.
+
+2. Install the requirements
+
 pip install -r requirements.txt
-```
 
-### 3. Configure environment
+3. Create .env
 
-Copy `.env.example` to `.env` and fill in your values:
+Copy .env.example to .env and add your bot token.
 
-```env
 DISCORD_TOKEN=your_discord_bot_token
+PROXY_HOST=your_proxy_host
+PROXY_PORT=your_proxy_port
+PROXY_USER=your_proxy_username
+PROXY_PASS=your_proxy_password
 
-# Proxy (DataImpulse default — replace with your own)
-PROXY_HOST=gw.dataimpulse.com
-PROXY_PORT=823
-PROXY_USER=your_username
-PROXY_PASS=your_password
-```
+4. Run it
 
-### 4. Run the bot
-
-```bash
 python bot.py
-```
 
-On first run, the bot will:
-- Initialize the SQLite database (`monitor.db`)
-- Load any saved proxy from the database
-- Resume any monitors that were active before the last shutdown
-- Sync slash commands to Discord
+The database will be created automatically the first time you run the bot.
 
----
+If you already had monitors running before restarting the bot, it will load them again from the database.
 
-## Configuration
+Config
 
-| Variable | Default | Description |
-|---|---|---|
-| `DISCORD_TOKEN` | *(required)* | Your Discord bot token |
-| `PROXY_HOST` | `gw.dataimpulse.com` | Proxy hostname |
-| `PROXY_PORT` | `823` | Proxy port |
-| `PROXY_USER` | *(empty)* | Proxy username |
-| `PROXY_PASS` | *(empty)* | Proxy password |
-| `CHECK_INTERVAL` | `30` | Seconds between status checks (in `config.py`) |
-| `REQUEST_TIMEOUT` | `15` | HTTP request timeout in seconds (in `config.py`) |
+These are the main settings:
 
-Proxy settings can also be updated at runtime via the `/setproxy` command — changes are written back to `.env` and `config.py` automatically.
+DISCORD_TOKEN    Discord bot token
+PROXY_HOST       Proxy host
+PROXY_PORT       Proxy port
+PROXY_USER       Proxy username
+PROXY_PASS       Proxy password
+CHECK_INTERVAL   Time between checks (default: 30)
+REQUEST_TIMEOUT  Request timeout (default: 15)
 
----
+You can also change the proxy from Discord using:
 
-## Database Schema
+/setproxy <proxy>
 
-The bot uses a local SQLite file (`monitor.db`) with three tables:
+The new proxy is saved so you don’t have to enter it again after restarting.
 
-**`monitors`** — active monitoring sessions
-- `username`, `mode` (ban/unban), `channel_id`, `user_id`, `start_time`, `checks`
+Database
 
-**`proxy`** — saved proxy configuration (single row)
-- `host`, `port`, `user`, `pass`
+Everything is stored in one SQLite database:
 
-**`history`** — completed ban/unban events
-- `username`, `mode`, `result`, `followers`, `elapsed`, `timestamp`
+monitor.db
 
----
+There are three main tables:
 
-## Dependencies
+monitors
+proxy
+history
 
-| Package | Version | Purpose |
-|---|---|---|
-| `discord.py` | 2.3.2 | Discord bot framework and slash commands |
-| `aiohttp` | 3.9.5 | Async HTTP requests to Instagram |
-| `python-dotenv` | 1.0.1 | `.env` file loading |
-| `Pillow` | latest | Image support (discord.py optional dependency) |
+monitors keeps track of accounts currently being watched.
 
----
+proxy stores the current proxy settings.
 
-## Discord Bot Permissions
+history keeps the recent ban/unban results.
 
-When inviting the bot to your server, it needs the following permissions:
+Requirements
 
-- **Send Messages**
-- **Embed Links**
-- **Read Message History**
-- **Use Slash Commands** (Application Commands scope)
+discord.py==2.3.2
+aiohttp==3.9.5
+python-dotenv==1.0.1
+Pillow
 
-Make sure to enable the **`applications.commands`** OAuth2 scope when generating your invite link.
+Discord permissions
 
----
+The bot needs:
 
-## Notes
+* Send Messages
+* Embed Links
+* Read Message History
+* Use Slash Commands
 
-- Instagram's unofficial endpoints are used for account status checks. This is outside Instagram's Terms of Service — use responsibly and keep the repository private.
-- A proxy is strongly recommended. Without one, Instagram will rate-limit or block requests from your server's IP quickly.
-- Slash commands may take up to 1 hour to appear globally after the bot first syncs. For instant testing, restrict the bot to a single server (guild-scoped sync).
